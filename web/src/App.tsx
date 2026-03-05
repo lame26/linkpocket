@@ -531,14 +531,18 @@ export default function App() {
   );
 
   const runAiEnrichmentInBackground = useCallback(
-    async (link: Pick<LinkItem, "id" | "title" | "url">) => {
+    async (link: Pick<LinkItem, "id" | "title" | "url">, options?: { silent?: boolean }) => {
       try {
         await runAiWithRetry(link.id, 1);
-        setToast({ kind: "ok", message: `AI 분석 완료: ${getLinkDisplayLabel(link)}` });
+        if (!options?.silent) {
+          setToast({ kind: "ok", message: `AI 분석 완료: ${getLinkDisplayLabel(link)}` });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setErrorMessage(`AI 자동 분석 실패: ${message}`);
-        setToast({ kind: "err", message: `AI 분석 실패: ${getLinkDisplayLabel(link)} (재시도 가능)` });
+        if (!options?.silent) {
+          setToast({ kind: "err", message: `AI 분석 실패: ${getLinkDisplayLabel(link)} (재시도 가능)` });
+        }
       } finally {
         await loadLinks();
       }
@@ -794,6 +798,7 @@ export default function App() {
 
       let inserted = 0;
       let failed = 0;
+      const importedLinksForAi: Array<Pick<LinkItem, "id" | "url" | "title">> = [];
 
       for (let i = 0; i < rows.length; i += 1) {
         const row = rows[i];
@@ -844,19 +849,25 @@ export default function App() {
         }
 
         inserted += 1;
-        if (parseUrlValid(rawUrl)) {
-          void runAiEnrichmentInBackground({
-            id: data.id,
-            url: data.url,
-            title: data.title
-          });
-        }
+        importedLinksForAi.push({
+          id: data.id,
+          url: data.url,
+          title: data.title
+        });
       }
 
       await loadLinks();
+      if (importedLinksForAi.length > 0) {
+        void (async () => {
+          for (const link of importedLinksForAi) {
+            await runAiEnrichmentInBackground(link, { silent: true });
+          }
+          setToast({ kind: "ok", message: `가져온 기사 AI 보강 완료 (${importedLinksForAi.length}건)` });
+        })();
+      }
       setToast({
         kind: failed > 0 ? "info" : "ok",
-        message: `가져오기 완료: 성공 ${inserted}건${failed > 0 ? `, 실패 ${failed}건` : ""}`
+        message: `가져오기 완료: 성공 ${inserted}건${failed > 0 ? `, 실패 ${failed}건` : ""}${importedLinksForAi.length > 0 ? ` · AI 보강 시작` : ""}`
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

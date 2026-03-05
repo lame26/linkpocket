@@ -301,6 +301,18 @@ function toSafeErrorMessage(error: unknown): string {
   return text.slice(0, 400);
 }
 
+function isSyntheticImportUrl(input: string): boolean {
+  try {
+    const parsed = new URL(input);
+    const hostMatched = parsed.hostname === "www.google.com" || parsed.hostname === "google.com";
+    const pathMatched = parsed.pathname === "/search";
+    const q = (parsed.searchParams.get("q") || "").toLowerCase();
+    return hostMatched && pathMatched && q.includes("linklens import");
+  } catch {
+    return false;
+  }
+}
+
 function normalizeAiCategory(raw: string | undefined): string {
   const value = (raw || "").trim();
   if (!value) {
@@ -483,8 +495,9 @@ export default {
           input: { url: link.url, title: link.title, note: link.note }
         });
 
-        const rawTitle = await fetchPageTitle(link.url);
-        const fallbackTitle = new URL(link.url).hostname;
+        const syntheticImport = isSyntheticImportUrl(link.url);
+        const rawTitle = syntheticImport ? null : await fetchPageTitle(link.url);
+        const fallbackTitle = syntheticImport ? "imported-article" : new URL(link.url).hostname;
 
         const analysis = await callOpenAiJson<{
           improvedTitle?: string;
@@ -498,13 +511,14 @@ export default {
             "Return strict JSON only.",
             "No hallucinations: if uncertain, keep values conservative.",
             "If rawTitle is available, use it to improve title quality.",
-            "summary must be max 2 Korean sentences.",
+            "summary must be max 3 Korean sentences.",
             "keywords must be an array of up to 5 short strings.",
             `category must be exactly one of: ${AI_CATEGORY_CATALOG.join(", ")}.`,
             "Never output a category outside the allowed list."
           ].join(" "),
           [
             `URL: ${link.url}`,
+            `Synthetic import URL: ${syntheticImport ? "yes" : "no"}`,
             `Raw title: ${rawTitle ?? ""}`,
             `Current title: ${link.title ?? ""}`,
             `User note: ${link.note ?? ""}`,
