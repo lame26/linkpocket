@@ -59,6 +59,9 @@ async function parseResponseError(response: Response): Promise<string> {
 type SortMode = "newest" | "oldest" | "rating";
 type ViewMode = "card" | "list";
 type StatusFilter = "all" | LinkStatus;
+type ThemeMode = "dark" | "light";
+
+const CATEGORY_MENU = ["테크/IT", "경제/금융", "AI/미래", "과학", "정치/사회"] as const;
 
 interface LinkDraft {
   note: string;
@@ -220,10 +223,12 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [collectionFilter, setCollectionFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [showTrash, setShowTrash] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
 
   const [newUrl, setNewUrl] = useState("");
   const [newTitle, setNewTitle] = useState("");
@@ -234,6 +239,8 @@ export default function App() {
   const [newTags, setNewTags] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [manualTitleEdited, setManualTitleEdited] = useState(false);
 
   const [collectionName, setCollectionName] = useState("");
   const [collectionColor, setCollectionColor] = useState("#5f7df3");
@@ -290,6 +297,22 @@ export default function App() {
       setSelectedLinkId(null);
     }
   }, [links, selectedLinkId]);
+
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("linklens-theme") : null;
+    if (saved === "light" || saved === "dark") {
+      setThemeMode(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = themeMode;
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("linklens-theme", themeMode);
+    }
+  }, [themeMode]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -363,6 +386,10 @@ export default function App() {
       query = query.eq("collection_id", collectionFilter);
     }
 
+    if (categoryFilter !== "all") {
+      query = query.eq("category", categoryFilter);
+    }
+
     if (favoriteOnly) {
       query = query.eq("is_favorite", true);
     }
@@ -396,7 +423,7 @@ export default function App() {
 
     const mapped = (data || []).map(mapLinkRow);
     setLinks(mapped);
-  }, [session, showTrash, statusFilter, collectionFilter, favoriteOnly, search, sortMode]);
+  }, [session, showTrash, statusFilter, collectionFilter, categoryFilter, favoriteOnly, search, sortMode]);
 
   const requestAiAnalysis = useCallback(
     async (linkId: string): Promise<void> => {
@@ -474,6 +501,59 @@ export default function App() {
 
     void Promise.all([loadCollections(), loadLinks()]);
   }, [session, loadCollections, loadLinks]);
+
+  useEffect(() => {
+    if (!isAddModalOpen || !session) {
+      return;
+    }
+
+    if (manualTitleEdited) {
+      return;
+    }
+
+    const targetUrl = newUrl.trim();
+    if (!parseUrlValid(targetUrl)) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const response = await fetch(toApiUrl("/api/v1/ai/preview-title"), {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ url: targetUrl }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(await parseResponseError(response));
+        }
+
+        const payload = (await response.json()) as { title?: string };
+        if (payload?.title && !manualTitleEdited) {
+          setNewTitle(payload.title);
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          const message = error instanceof Error ? error.message : String(error);
+          setErrorMessage(`제목 자동완성 실패: ${message}`);
+        }
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 600);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      setPreviewLoading(false);
+    };
+  }, [isAddModalOpen, session, newUrl, manualTitleEdited]);
 
   async function syncLinkTags(linkId: string, tagsRaw: string): Promise<void> {
     if (!session) {
@@ -866,14 +946,10 @@ export default function App() {
   );
 
   const categoryStats = useMemo(() => {
-    const seed: Record<string, number> = {};
-    for (const item of links) {
-      const key = (item.category || "uncategorized").toLowerCase();
-      seed[key] = (seed[key] || 0) + 1;
-    }
-    return Object.entries(seed)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+    return CATEGORY_MENU.map((category) => ({
+      category,
+      count: links.filter((item) => item.category === category).length
+    }));
   }, [links]);
 
   const readingCount = useMemo(() => links.filter((item) => item.status === "reading").length, [links]);
@@ -940,8 +1016,14 @@ export default function App() {
             <p className="eyebrow">Reading Archive</p>
               <h1 className="logo-name">LinkLens</h1>
             </div>
-            <button type="button" className="icon-btn" aria-label="테마 토글" title="테마 토글 (준비중)">
-              ◐
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="테마 토글"
+              title="테마 토글"
+              onClick={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
+            >
+              {themeMode === "dark" ? "☀️" : "🌙"}
             </button>
           </div>
         </div>
@@ -955,6 +1037,7 @@ export default function App() {
               onClick={() => {
                 setShowTrash(false);
                 setStatusFilter("all");
+                setCategoryFilter("all");
                 setFavoriteOnly(false);
               }}
             >
@@ -966,6 +1049,7 @@ export default function App() {
               onClick={() => {
                 setShowTrash(false);
                 setStatusFilter("unread");
+                setCategoryFilter("all");
                 setFavoriteOnly(false);
               }}
             >
@@ -977,6 +1061,7 @@ export default function App() {
               onClick={() => {
                 setShowTrash(false);
                 setStatusFilter("reading");
+                setCategoryFilter("all");
                 setFavoriteOnly(false);
               }}
             >
@@ -988,6 +1073,7 @@ export default function App() {
               onClick={() => {
                 setShowTrash(false);
                 setStatusFilter("all");
+                setCategoryFilter("all");
                 setFavoriteOnly(true);
               }}
             >
@@ -999,6 +1085,7 @@ export default function App() {
               onClick={() => {
                 setShowTrash(false);
                 setStatusFilter("done");
+                setCategoryFilter("all");
                 setFavoriteOnly(false);
               }}
             >
@@ -1009,6 +1096,7 @@ export default function App() {
               className={`nav-btn ${showTrash ? "active" : ""}`}
               onClick={() => {
                 setFavoriteOnly(false);
+                setCategoryFilter("all");
                 setShowTrash((prev) => !prev);
               }}
             >
@@ -1017,13 +1105,21 @@ export default function App() {
           </div>
 
           <div className="nav-group">
-            <p className="nav-group-label">카테고리 요약</p>
-            {categoryStats.length === 0 && <p className="sidebar-empty">아직 데이터 없음</p>}
-            {categoryStats.map(([name, count]) => (
-              <div key={name} className="cat-row">
-                <span>{name}</span>
-                <span>{count}</span>
-              </div>
+            <p className="nav-group-label">카테고리</p>
+            {categoryStats.map((row) => (
+              <button
+                key={row.category}
+                type="button"
+                className={`nav-btn ${!showTrash && categoryFilter === row.category ? "active" : ""}`}
+                onClick={() => {
+                  setShowTrash(false);
+                  setFavoriteOnly(false);
+                  setCategoryFilter((prev) => (prev === row.category ? "all" : row.category));
+                }}
+              >
+                {row.category}
+                <span className="nav-count">{row.count}</span>
+              </button>
             ))}
           </div>
 
@@ -1082,6 +1178,7 @@ export default function App() {
                 setSearch("");
                 setStatusFilter("all");
                 setCollectionFilter("all");
+                setCategoryFilter("all");
                 setSortMode("newest");
                 setFavoriteOnly(false);
               }}
@@ -1098,6 +1195,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 setIsAddModalOpen(true);
+                setManualTitleEdited(false);
                 setTimeout(() => newUrlInputRef.current?.focus(), 0);
               }}
             >
@@ -1448,10 +1546,14 @@ export default function App() {
                   제목 (자동 입력, 직접 수정 가능)
                   <input
                     value={newTitle}
-                    onChange={(event) => setNewTitle(event.target.value)}
+                    onChange={(event) => {
+                      setManualTitleEdited(true);
+                      setNewTitle(event.target.value);
+                    }}
                     placeholder="기사 제목을 입력하거나 자동 감지됩니다"
                   />
                 </label>
+                {previewLoading && <p className="muted">제목 자동 감지 중...</p>}
 
                 <div className="modal-row">
                   <label>
