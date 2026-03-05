@@ -226,10 +226,14 @@ export default function App() {
   const [showTrash, setShowTrash] = useState(false);
 
   const [newUrl, setNewUrl] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState("테크/IT");
   const [newNote, setNewNote] = useState("");
   const [newStatus, setNewStatus] = useState<LinkStatus>("unread");
   const [newCollectionId, setNewCollectionId] = useState("");
   const [newTags, setNewTags] = useState("");
+  const [newTagInput, setNewTagInput] = useState("");
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const [collectionName, setCollectionName] = useState("");
   const [collectionColor, setCollectionColor] = useState("#5f7df3");
@@ -295,6 +299,12 @@ export default function App() {
         return;
       }
 
+      if (isAddModalOpen && event.key === "Escape") {
+        event.preventDefault();
+        setIsAddModalOpen(false);
+        return;
+      }
+
       if (!selectedLink) {
         return;
       }
@@ -307,7 +317,7 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedLink]);
+  }, [selectedLink, isAddModalOpen]);
 
   const loadCollections = useCallback(async () => {
     if (!session) {
@@ -618,10 +628,11 @@ export default function App() {
       const payload = {
         user_id: session.user.id,
         url: trimmedUrl,
-        title: null,
+        title: newTitle.trim() || null,
         note: newNote.trim() || null,
         status: newStatus,
-        collection_id: newCollectionId || null
+        collection_id: newCollectionId || null,
+        category: newCategory
       };
 
       const { data, error }: { data: any; error: any } = await withTimeout(
@@ -665,10 +676,14 @@ export default function App() {
       setToast({ kind: "info", message: `저장됨: ${getLinkDisplayLabel(optimistic)} (AI 분석 중)` });
 
       setNewUrl("");
+      setNewTitle("");
+      setNewCategory("테크/IT");
       setNewNote("");
       setNewStatus("unread");
       setNewCollectionId("");
       setNewTags("");
+      setNewTagInput("");
+      setIsAddModalOpen(false);
 
       void runAiEnrichmentInBackground(optimistic);
       void loadLinks();
@@ -821,6 +836,23 @@ export default function App() {
         }
       };
     });
+  }
+
+  const modalTags = useMemo(() => normalizeTags(newTags), [newTags]);
+
+  function appendModalTag(tagRaw: string): void {
+    const trimmed = tagRaw.trim().replace(/^#+/, "");
+    if (!trimmed) {
+      return;
+    }
+    const next = normalizeTags(`${newTags},${trimmed}`);
+    setNewTags(next.join(", "));
+    setNewTagInput("");
+  }
+
+  function removeModalTag(tag: string): void {
+    const next = modalTags.filter((item) => item !== tag);
+    setNewTags(next.join(", "));
   }
 
   const headerStats = useMemo(
@@ -1065,8 +1097,8 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                newUrlInputRef.current?.focus();
-                newUrlInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                setIsAddModalOpen(true);
+                setTimeout(() => newUrlInputRef.current?.focus(), 0);
               }}
             >
               + 링크 추가
@@ -1136,61 +1168,6 @@ export default function App() {
                 ☰
               </button>
             </div>
-          </section>
-
-          <section className="panel panel-accent">
-            <h2>링크 추가</h2>
-            <p className="section-subtitle">붙여넣고 저장하면 AI 제목과 분석까지 바로 이어진다.</p>
-            <form onSubmit={handleCreateLink} className="grid-form">
-              <label className="full">
-                URL
-                <input
-                  ref={newUrlInputRef}
-                  value={newUrl}
-                  onChange={(event) => setNewUrl(event.target.value)}
-                  placeholder="https://..."
-                  required
-                />
-              </label>
-
-              <p className="muted full">제목/요약/태그/카테고리는 저장 후 AI가 자동 생성한다.</p>
-
-              <label>
-                상태
-                <select value={newStatus} onChange={(event) => setNewStatus(event.target.value as LinkStatus)}>
-                  <option value="unread">읽기전</option>
-                  <option value="reading">읽음</option>
-                  <option value="done">완료</option>
-                  <option value="archived">보관</option>
-                </select>
-              </label>
-
-              <label>
-                컬렉션
-                <select value={newCollectionId} onChange={(event) => setNewCollectionId(event.target.value)}>
-                  <option value="">없음</option>
-                  {collections.map((collection) => (
-                    <option key={collection.id} value={collection.id}>
-                      {collection.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="full">
-                태그 (쉼표 구분)
-                <input value={newTags} onChange={(event) => setNewTags(event.target.value)} placeholder="ai, cloudflare, 읽을거리" />
-              </label>
-
-              <label className="full">
-                메모
-                <textarea value={newNote} onChange={(event) => setNewNote(event.target.value)} rows={3} placeholder="요약 메모" />
-              </label>
-
-              <button type="submit" disabled={savingLink}>
-                {savingLink ? "저장 중..." : "링크 저장"}
-              </button>
-            </form>
           </section>
 
           <div className="panel-row">
@@ -1409,6 +1386,135 @@ export default function App() {
               })}
           </section>
         </div>
+
+        {isAddModalOpen && (
+          <div
+            className="add-modal-overlay"
+            onClick={() => setIsAddModalOpen(false)}
+            role="presentation"
+          >
+            <section
+              className="add-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="링크 추가"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="add-modal-head">
+                <h3>링크 추가</h3>
+                <button type="button" className="icon-btn" onClick={() => setIsAddModalOpen(false)} aria-label="닫기">
+                  ×
+                </button>
+              </div>
+
+              <p className="add-modal-hint">AI가 자동으로 제목, 요약, 키워드, 카테고리를 추출합니다</p>
+
+              <form onSubmit={handleCreateLink} className="add-modal-form">
+                <label className="full">
+                  URL *
+                  <div className="url-input-row">
+                    <input
+                      ref={newUrlInputRef}
+                      value={newUrl}
+                      onChange={(event) => setNewUrl(event.target.value)}
+                      placeholder="https://news-site.com/article"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText();
+                          if (text) {
+                            setNewUrl(text);
+                          }
+                        } catch {
+                          setErrorMessage("클립보드 읽기에 실패했습니다.");
+                        }
+                      }}
+                    >
+                      붙여넣기
+                    </button>
+                  </div>
+                </label>
+
+                <label className="full">
+                  제목 (자동 입력, 직접 수정 가능)
+                  <input
+                    value={newTitle}
+                    onChange={(event) => setNewTitle(event.target.value)}
+                    placeholder="기사 제목을 입력하거나 자동 감지됩니다"
+                  />
+                </label>
+
+                <div className="modal-row">
+                  <label>
+                    카테고리
+                    <select value={newCategory} onChange={(event) => setNewCategory(event.target.value)}>
+                      <option value="테크/IT">테크/IT</option>
+                      <option value="경제/금융">경제/금융</option>
+                      <option value="AI/미래">AI/미래</option>
+                      <option value="과학">과학</option>
+                      <option value="정치/사회">정치/사회</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    읽기 상태
+                    <select value={newStatus} onChange={(event) => setNewStatus(event.target.value as LinkStatus)}>
+                      <option value="unread">미읽음</option>
+                      <option value="reading">읽음</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="full">
+                  태그 (Enter로 추가)
+                  <input
+                    value={newTagInput}
+                    onChange={(event) => setNewTagInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        appendModalTag(newTagInput);
+                      }
+                    }}
+                    placeholder="태그를 입력하고 Enter"
+                  />
+                </label>
+                {modalTags.length > 0 && (
+                  <div className="tag-chip-row">
+                    {modalTags.map((tag) => (
+                      <button key={tag} type="button" className="tag-chip" onClick={() => removeModalTag(tag)} title="태그 제거">
+                        #{tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <label className="full">
+                  메모
+                  <textarea
+                    value={newNote}
+                    onChange={(event) => setNewNote(event.target.value)}
+                    rows={4}
+                    placeholder="이 기사에 대한 생각이나 메모를 남겨보세요"
+                  />
+                </label>
+
+                <div className="add-modal-footer">
+                  <button type="button" className="ghost" onClick={() => setIsAddModalOpen(false)}>
+                    취소
+                  </button>
+                  <button type="submit" disabled={savingLink}>
+                    {savingLink ? "저장 중..." : "AI 분석 후 저장"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
 
         <div
           className={`detail-backdrop ${selectedLink ? "open" : ""}`}
