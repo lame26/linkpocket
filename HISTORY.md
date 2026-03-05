@@ -129,3 +129,21 @@
 - 변경 목적: 세션이 끊겨도 다음 작업자가 빠르게 문맥을 복구하도록 README 기반 문서 로딩 루틴과 향후 작업 목록을 명시
 - 사용자 체감 변화: `README.md`만 확인해도 필수 문서(결정/이슈/다음작업/셋업/이력)로 자연스럽게 이어져 업무 연속성 향상
 - 남은 리스크/다음 작업: `NEXT_TASKS.md` 상태를 실제 진행에 맞게 지속 갱신해야 효과 유지
+
+## 2026-03-05 (오늘 마감 정리: import 후 백그라운드 AI 자동 처리 + 배포 안정화)
+- 변경 목적: 가져오기(import) 완료 직후 사용자가 추가 작업을 하지 않아도 AI가 백그라운드에서 제목/요약/카테고리를 자동 보강하도록 고정
+- 사용자 체감 변화: 파일 업로드 -> 목록 반영 -> AI 보강 자동 진행(완료 토스트) 흐름으로 단순화
+- 구현 요약:
+  - web: import 시 삽입된 링크 목록을 모아 `runAiEnrichmentInBackground(..., { silent: true })` 순차 실행
+  - api: import 대체 URL(검색 URL) 감지 시에도 메모/제목 컨텍스트 기반으로 분석 수행
+  - import 데이터 정책 정리: tags/keywords 혼선 방지를 위해 import 키워드는 태그로만 적재, `links.keywords`는 AI 전용으로 유지
+  - 카테고리: AI 카테고리 카탈로그 확장 및 normalize 로직 추가
+- 운영 이슈 및 조치:
+  - 증상: `linkpocket.pages.dev` 접속 시 배경만 보임
+  - 원인: 프론트 빌드 시 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` 미주입으로 런타임 즉시 크래시
+  - 조치: env 주입 재빌드 후 Pages 재배포 완료
+- 배포 상태:
+  - Worker: `linkpocket-api` 최신 배포 완료
+  - Pages: production 최신 배포 ID `8a02f3d8-5407-4845-82d9-19e56bea9af1`
+- 커밋:
+  - `b18bbb0` Auto-run AI enrichment in background after file import

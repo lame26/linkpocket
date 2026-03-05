@@ -24,3 +24,13 @@
 - [x] Worker 프로덕션 배포 후 `VITE_API_BASE_URL` 실주소 재검증
 - [ ] 저장 -> AI 자동분석 E2E 체크리스트 문서화
 - [ ] 인증/저장 실패 케이스 네트워크 로그 템플릿 추가 (401/CORS/500 빠른 진단)
+
+## 2026-03-05 마감 기준 우선순위
+- [x] import 직후 AI 백그라운드 자동 보강 연결
+- [x] import 시 tags/keywords 적재 정책 분리(키워드 AI 전용)
+- [x] AI 카테고리 자동 분류 카탈로그 확장
+- [x] Worker/Pages 배포 반영 및 최신 production 배포 확인
+- [ ] Cloudflare Pages 프로젝트에 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`를 빌드 환경변수로 고정 등록 (재발 방지)
+- [ ] import 진행률 UI(n/m) + 중단/재시도 UX 추가
+- [ ] import 완료 항목 일괄 "재분석" 버튼(배치 재처리) 추가
+- [ ] 대시보드 시인성 고도화 2차: 카드/아이콘 정보 밀도 및 모바일 레이아웃 최종 다듬기
