@@ -768,6 +768,7 @@ export default function App() {
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
   const [selectedLinkIds, setSelectedLinkIds] = useState<string[]>([]);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [toast, setToast] = useState<{ kind: "info" | "ok" | "err"; message: string } | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -938,12 +939,33 @@ export default function App() {
   useEffect(() => {
     if (mainTab !== "library") {
       setSelectedLinkIds([]);
+      setMultiSelectMode(false);
     }
   }, [mainTab]);
 
   useEffect(() => {
     setSelectedLinkIds([]);
   }, [statusFilter, collectionFilter, categoryFilter, favoriteOnly, showTrash]);
+
+  useEffect(() => {
+    if (!multiSelectMode) {
+      setSelectedLinkIds([]);
+    }
+  }, [multiSelectMode]);
+
+  useEffect(() => {
+    if (!importingFile) {
+      return;
+    }
+
+    function handleBeforeUnload(event: BeforeUnloadEvent): void {
+      event.preventDefault();
+      event.returnValue = "파일 업로드가 진행 중입니다.";
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [importingFile]);
 
   function resetAiPreferenceState(): void {
     setSummaryLengthMode("medium");
@@ -2213,6 +2235,61 @@ export default function App() {
     setToast({ kind: "ok", message: `${targetIds.length}건을 삭제했습니다.` });
   }
 
+  async function restoreDeletedLinks(targetIds: string[]): Promise<void> {
+    if (targetIds.length === 0) {
+      return;
+    }
+
+    setErrorMessage(null);
+    const { error } = await supabase.from("links").update({ deleted_at: null }).in("id", targetIds).not("deleted_at", "is", null);
+    if (error) {
+      setErrorMessage(`일괄 복원 실패: ${error.message}`);
+      return;
+    }
+
+    setSelectedLinkIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+    if (selectedLinkId && targetIds.includes(selectedLinkId)) {
+      setSelectedLinkId(null);
+    }
+    await loadLinks({ silent: true });
+    setToast({ kind: "ok", message: `${targetIds.length}건을 복원했습니다.` });
+  }
+
+  async function permanentlyDeleteLinks(targetIds: string[]): Promise<void> {
+    if (targetIds.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `선택한 휴지통 기사 ${targetIds.length}건을 영구 삭제할까요?\n이 작업은 되돌릴 수 없습니다.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setErrorMessage(null);
+    const { error } = await supabase.from("links").delete().in("id", targetIds);
+    if (error) {
+      setErrorMessage(`영구 삭제 실패: ${error.message}`);
+      return;
+    }
+
+    setSelectedLinkIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+    if (selectedLinkId && targetIds.includes(selectedLinkId)) {
+      setSelectedLinkId(null);
+    }
+    await loadLinks({ silent: true });
+    setToast({ kind: "ok", message: `${targetIds.length}건을 영구 삭제했습니다.` });
+  }
+
+  function handleCardPrimaryAction(link: LinkItem): void {
+    if (multiSelectMode) {
+      toggleSelectLink(link.id);
+      return;
+    }
+    openLinkDetail(link);
+  }
+
   async function toggleFavorite(link: LinkItem) {
     const { error } = await supabase
       .from("links")
@@ -2885,45 +2962,77 @@ export default function App() {
 	                  안읽음만
 	                </button>
 	              </div>
-	              {!showTrash && (
-	                <div className="bulk-toolbar">
-	                  <button
-	                    type="button"
-	                    className={`chip ${allVisibleSelected ? "active" : ""}`}
-	                    onClick={() => toggleSelectAllVisible(allVisibleSelected, visibleLinkIds)}
-	                    disabled={visibleLinks.length === 0}
-	                  >
-	                    {allVisibleSelected ? "전체선택 해제" : "전체선택"}
-	                  </button>
-	                  <span className="bulk-count">{selectedVisibleCount}개 선택</span>
-	                  <button
-	                    type="button"
-	                    className="chip"
-	                    onClick={() => void bulkUpdateStatus("reading", selectedVisibleIds)}
-	                    disabled={selectedVisibleCount === 0}
-	                  >
-	                    읽음으로
-	                  </button>
-	                  <button
-	                    type="button"
-	                    className="chip"
-	                    onClick={() => void bulkUpdateStatus("unread", selectedVisibleIds)}
-	                    disabled={selectedVisibleCount === 0}
-	                  >
-	                    안읽음으로
-	                  </button>
-	                  <button
-	                    type="button"
-	                    className="chip danger-chip"
-	                    onClick={() => void bulkDeleteLinks(selectedVisibleIds)}
-	                    disabled={selectedVisibleCount === 0}
-	                  >
-	                    삭제
-	                  </button>
-	                </div>
-	              )}
-	            </div>
-	            <div className="view-toggle">
+		              <div className="bulk-toolbar">
+		                <button
+		                  type="button"
+		                  className={`chip ${multiSelectMode ? "active" : ""}`}
+		                  onClick={() => setMultiSelectMode((prev) => !prev)}
+		                >
+		                  {multiSelectMode ? "다중선택 종료" : "다중선택"}
+		                </button>
+		                {multiSelectMode && (
+		                  <>
+		                    <button
+		                      type="button"
+		                      className={`chip ${allVisibleSelected ? "active" : ""}`}
+		                      onClick={() => toggleSelectAllVisible(allVisibleSelected, visibleLinkIds)}
+		                      disabled={visibleLinks.length === 0}
+		                    >
+		                      {allVisibleSelected ? "전체선택 해제" : "전체선택"}
+		                    </button>
+		                    <span className="bulk-count">{selectedVisibleCount}개 선택</span>
+		                    {showTrash ? (
+		                      <>
+		                        <button
+		                          type="button"
+		                          className="chip"
+		                          onClick={() => void restoreDeletedLinks(selectedVisibleIds)}
+		                          disabled={selectedVisibleCount === 0}
+		                        >
+		                          복원
+		                        </button>
+		                        <button
+		                          type="button"
+		                          className="chip danger-chip"
+		                          onClick={() => void permanentlyDeleteLinks(selectedVisibleIds)}
+		                          disabled={selectedVisibleCount === 0}
+		                        >
+		                          영구삭제
+		                        </button>
+		                      </>
+		                    ) : (
+		                      <>
+		                        <button
+		                          type="button"
+		                          className="chip"
+		                          onClick={() => void bulkUpdateStatus("reading", selectedVisibleIds)}
+		                          disabled={selectedVisibleCount === 0}
+		                        >
+		                          읽음으로
+		                        </button>
+		                        <button
+		                          type="button"
+		                          className="chip"
+		                          onClick={() => void bulkUpdateStatus("unread", selectedVisibleIds)}
+		                          disabled={selectedVisibleCount === 0}
+		                        >
+		                          안읽음으로
+		                        </button>
+		                        <button
+		                          type="button"
+		                          className="chip danger-chip"
+		                          onClick={() => void bulkDeleteLinks(selectedVisibleIds)}
+		                          disabled={selectedVisibleCount === 0}
+		                        >
+		                          삭제
+		                        </button>
+		                      </>
+		                    )}
+		                  </>
+		                )}
+		              </div>
+		            </div>
+		            <div className="view-toggle">
               <button
                 type="button"
                 className={`icon-btn ${viewMode === "card" ? "active" : ""}`}
@@ -2967,40 +3076,42 @@ export default function App() {
 	                      .filter((item) => item.length > 0)
 	                  )
 	                );
-	                const isMultiSelected = selectedLinkIds.includes(link.id);
-	                return (
-	                  <article
-	                    key={link.id}
-	                    className={`link-card ${selectedLinkId === link.id ? "selected" : ""} ${isMultiSelected ? "multi-selected" : ""}`}
-	                    onClick={() => openLinkDetail(link)}
-	                    role="button"
-	                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        openLinkDetail(link);
-                      }
-                    }}
-	                  >
-	                    <header>
-	                      <div className="tile-head">
-	                        <label
-	                          className="multi-select-toggle"
-	                          onClick={(event) => event.stopPropagation()}
-	                          onMouseDown={(event) => event.stopPropagation()}
-	                        >
-	                          <input
-	                            type="checkbox"
-	                            checked={isMultiSelected}
-	                            onChange={() => toggleSelectLink(link.id)}
-	                            onClick={(event) => event.stopPropagation()}
-	                            onKeyDown={(event) => event.stopPropagation()}
-	                            aria-label="항목 선택"
-	                          />
-	                        </label>
-	                        <div className="tile-icon" aria-hidden>
-	                          {getUrlHostLabel(link.url).slice(0, 1).toUpperCase()}
-	                        </div>
+		                const isMultiSelected = selectedLinkIds.includes(link.id);
+		                return (
+		                  <article
+		                    key={link.id}
+		                    className={`link-card ${selectedLinkId === link.id && !multiSelectMode ? "selected" : ""} ${isMultiSelected ? "multi-selected" : ""} ${multiSelectMode ? "multi-mode" : ""}`}
+		                    onClick={() => handleCardPrimaryAction(link)}
+		                    role="button"
+		                    tabIndex={0}
+	                    onKeyDown={(event) => {
+	                      if (event.key === "Enter" || event.key === " ") {
+	                        event.preventDefault();
+	                        handleCardPrimaryAction(link);
+	                      }
+	                    }}
+		                  >
+		                    <header>
+		                      <div className="tile-head">
+		                        {multiSelectMode && (
+		                          <label
+		                            className="multi-select-toggle"
+		                            onClick={(event) => event.stopPropagation()}
+		                            onMouseDown={(event) => event.stopPropagation()}
+		                          >
+		                            <input
+		                              type="checkbox"
+		                              checked={isMultiSelected}
+		                              onChange={() => toggleSelectLink(link.id)}
+		                              onClick={(event) => event.stopPropagation()}
+		                              onKeyDown={(event) => event.stopPropagation()}
+		                              aria-label="항목 선택"
+		                            />
+		                          </label>
+		                        )}
+		                        <div className="tile-icon" aria-hidden>
+		                          {getUrlHostLabel(link.url).slice(0, 1).toUpperCase()}
+		                        </div>
                         <div className="link-title-wrap">
                         <div className="link-title-head">
                           {link.status === "unread" && <span className="unread-dot" aria-label="안읽음" />}
@@ -3107,23 +3218,37 @@ export default function App() {
                           ⟳
                         </button>
                       )}
-                      {showTrash ? (
-                        <button
-                          type="button"
-                          className="action-btn"
-                          aria-label="복원"
-                          title="복원"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void setLinkDeleted(link.id, false);
-                          }}
-                        >
-                          ↺
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="action-btn danger"
+	                      {showTrash ? (
+	                        <>
+	                          <button
+	                            type="button"
+	                            className="action-btn"
+	                            aria-label="복원"
+	                            title="복원"
+	                            onClick={(event) => {
+	                              event.stopPropagation();
+	                              void restoreDeletedLinks([link.id]);
+	                            }}
+	                          >
+	                            ↺
+	                          </button>
+	                          <button
+	                            type="button"
+	                            className="action-btn danger"
+	                            aria-label="영구 삭제"
+	                            title="영구 삭제"
+	                            onClick={(event) => {
+	                              event.stopPropagation();
+	                              void permanentlyDeleteLinks([link.id]);
+	                            }}
+	                          >
+	                            DEL
+	                          </button>
+	                        </>
+	                      ) : (
+	                        <button
+	                          type="button"
+	                          className="action-btn danger"
                           aria-label="삭제"
                           title="삭제"
                           onClick={(event) => {
@@ -3702,9 +3827,17 @@ export default function App() {
           )}
         </aside>
 
-        {toast && <div className={`toast toast-${toast.kind}`}>{toast.message}</div>}
-        {errorMessage && <p className="error-text global-error">{errorMessage}</p>}
-      </main>
-    </div>
+	        {toast && <div className={`toast toast-${toast.kind}`}>{toast.message}</div>}
+	        {errorMessage && <p className="error-text global-error">{errorMessage}</p>}
+	        {importingFile && (
+	          <div className="upload-lock-overlay" role="alert" aria-live="assertive">
+	            <div className="upload-lock-card">
+	              <strong>파일 업로드 진행 중</strong>
+	              <p>업로드가 끝날 때까지 새로고침/페이지 이동이 제한됩니다.</p>
+	            </div>
+	          </div>
+	        )}
+	      </main>
+	    </div>
   );
 }

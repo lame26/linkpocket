@@ -862,6 +862,10 @@ textarea {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 22%, transparent) inset;
 }
 
+.link-card.multi-mode {
+  cursor: pointer;
+}
+
 .links-panel.list .link-card {
   border-radius: var(--radius-xs);
   margin-bottom: 8px;
@@ -1662,6 +1666,40 @@ textarea {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 44%, var(--line));
   background: color-mix(in srgb, var(--danger) 14%, var(--surface-1));
+}
+
+.upload-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  background: color-mix(in srgb, #040608 72%, transparent);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.upload-lock-card {
+  width: min(420px, calc(100vw - 40px));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
+  box-shadow: var(--shadow-2);
+  padding: 16px 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.upload-lock-card strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.upload-lock-card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
 }
 
 @keyframes rise-in {
