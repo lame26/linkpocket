@@ -232,6 +232,12 @@ button.ghost:hover {
   font-size: clamp(28px, 4vw, 44px);
   letter-spacing: -0.03em;
   line-height: 1.08;
+  display: grid;
+  gap: 4px;
+}
+
+.auth-showcase h1 span {
+  display: block;
 }
 
 .auth-showcase-desc {
@@ -239,6 +245,30 @@ button.ghost:hover {
   color: var(--text-2);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.auth-showcase-metrics {
+  margin-top: 2px;
+  display: grid;
+  gap: 8px;
+}
+
+.auth-showcase-metrics article {
+  border-left: 2px solid color-mix(in srgb, var(--brand) 52%, var(--line));
+  padding-left: 10px;
+  display: grid;
+  gap: 2px;
+}
+
+.auth-showcase-metrics strong {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--text-1);
+}
+
+.auth-showcase-metrics span {
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .auth-showcase-list {
@@ -327,6 +357,59 @@ button.ghost:hover {
 .auth-switch-row span {
   color: var(--text-3);
   font-size: 12px;
+}
+
+.signup-guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, #04070a 74%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.signup-guide-modal {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--surface-1), var(--surface-2));
+  box-shadow: var(--shadow-2);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.signup-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.signup-guide-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: -0.015em;
+}
+
+.signup-guide-steps {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  display: grid;
+  gap: 4px;
+}
+
+.signup-guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .stack {
@@ -1866,6 +1949,10 @@ textarea {
     padding: 18px 16px;
   }
 
+  .auth-showcase h1 {
+    line-height: 1.12;
+  }
+
   .auth-head h2 {
     font-size: 26px;
   }
@@ -1938,6 +2025,11 @@ textarea {
   .topbar-right button.ghost,
   .topbar-right .user-btn {
     width: auto;
+  }
+
+  .signup-guide-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
   }
 
   .icon-btn,

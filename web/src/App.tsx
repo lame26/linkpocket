@@ -5,6 +5,7 @@ import type { Collection, LinkItem, LinkStatus } from "./lib/types";
 
 const RAW_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || "";
 const FALLBACK_PROD_API_BASE_URL = "https://linkpocket-api.lame26.workers.dev";
+const AUTH_MODE_QUERY_KEY = "auth";
 
 function isLocalHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1";
@@ -772,6 +773,7 @@ export default function App() {
   const [toast, setToast] = useState<{ kind: "info" | "ok" | "err"; message: string } | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSignupGuide, setShowSignupGuide] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -807,6 +809,17 @@ export default function App() {
     });
 
     return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(AUTH_MODE_QUERY_KEY) === "signup") {
+      setAuthMode("signup");
+      setAuthNotice("회원가입 후 이메일 인증을 완료한 뒤 로그인해 주세요.");
+    }
   }, []);
 
   useEffect(() => {
@@ -2565,20 +2578,37 @@ export default function App() {
               <img src="/logo-mark.svg" alt="" />
             </div>
             <p className="auth-showcase-kicker">LINKPOCKET</p>
-            <h1>읽을거리 아카이브를 더 선명하게</h1>
-            <p className="auth-showcase-desc">링크 저장, AI 요약, 태그 정리, 상태 관리까지 하나의 흐름으로 연결합니다.</p>
+            <h1>
+              <span>읽을거리 아카이브를</span>
+              <span>더 선명하게</span>
+            </h1>
+            <p className="auth-showcase-desc">저장부터 요약, 분류, 재탐색까지 하나의 화면에서 일관되게 관리하는 개인 지식 파이프라인.</p>
+            <div className="auth-showcase-metrics">
+              <article>
+                <strong>Save Fast</strong>
+                <span>URL / 파일 업로드 즉시 정리</span>
+              </article>
+              <article>
+                <strong>Think Clear</strong>
+                <span>AI 요약 + 키워드 + 카테고리 보강</span>
+              </article>
+              <article>
+                <strong>Find Again</strong>
+                <span>상태/태그/컬렉션 필터로 재탐색</span>
+              </article>
+            </div>
             <ul className="auth-showcase-list">
               <li>
-                <strong>빠른 수집</strong>
-                <span>URL 붙여넣기와 파일 업로드로 즉시 정리</span>
+                <strong>수집 속도 최적화</strong>
+                <span>여러 소스의 기사를 한 번에 모아도 흐름이 끊기지 않습니다.</span>
               </li>
               <li>
-                <strong>AI 보강</strong>
-                <span>제목, 요약, 키워드, 카테고리를 자동 분석</span>
+                <strong>핵심 정보 중심 요약</strong>
+                <span>중요 수치와 맥락을 놓치지 않도록 요약 품질을 커스터마이징할 수 있습니다.</span>
               </li>
               <li>
-                <strong>정밀 필터링</strong>
-                <span>상태, 카테고리, 컬렉션으로 바로 탐색</span>
+                <strong>다시 찾기 쉬운 구조</strong>
+                <span>읽기 상태와 태그를 기준으로 필요한 자료를 빠르게 복원합니다.</span>
               </li>
             </ul>
           </aside>
@@ -2619,7 +2649,11 @@ export default function App() {
                 type="button"
                 className="ghost"
                 onClick={() => {
-                  setAuthMode(authMode === "login" ? "signup" : "login");
+                  if (authMode === "login") {
+                    setShowSignupGuide(true);
+                    return;
+                  }
+                  setAuthMode("login");
                   setAuthNotice(null);
                   setErrorMessage(null);
                 }}
@@ -2632,6 +2666,53 @@ export default function App() {
             {errorMessage && <p className="error-text">{errorMessage}</p>}
           </section>
         </section>
+
+        {showSignupGuide && (
+          <div className="signup-guide-overlay" role="presentation" onClick={() => setShowSignupGuide(false)}>
+            <section className="signup-guide-modal" role="dialog" aria-modal="true" aria-label="회원가입 안내" onClick={(event) => event.stopPropagation()}>
+              <div className="signup-guide-head">
+                <h3>회원가입 안내</h3>
+                <button type="button" className="icon-btn" onClick={() => setShowSignupGuide(false)} aria-label="닫기">
+                  ×
+                </button>
+              </div>
+              <p className="muted">회원가입은 새 창 또는 현재 창에서 진행할 수 있습니다.</p>
+              <ol className="signup-guide-steps">
+                <li>회원가입을 완료합니다.</li>
+                <li>이메일 인증 메일에서 인증을 완료합니다.</li>
+                <li>인증 후 현재 로그인 화면에서 로그인합니다.</li>
+              </ol>
+              <div className="signup-guide-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      const nextUrl = new URL(window.location.href);
+                      nextUrl.searchParams.set(AUTH_MODE_QUERY_KEY, "signup");
+                      window.open(nextUrl.toString(), "_blank", "noopener,noreferrer");
+                    }
+                    setShowSignupGuide(false);
+                    setAuthNotice("새 창에서 가입 후 이메일 인증을 완료하고, 현재 창에서 로그인해 주세요.");
+                  }}
+                >
+                  새 창에서 가입
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("signup");
+                    setShowSignupGuide(false);
+                    setAuthNotice("회원가입 후 이메일 인증을 완료한 뒤 로그인해 주세요.");
+                    setErrorMessage(null);
+                  }}
+                >
+                  현재 창에서 가입
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </main>
     );
   }
