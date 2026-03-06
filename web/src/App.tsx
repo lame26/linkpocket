@@ -430,10 +430,6 @@ export default function App() {
 
     query = showTrash ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
 
-    if (statusFilter !== "all") {
-      query = query.eq("status", statusFilter);
-    }
-
     if (collectionFilter !== "all") {
       query = query.eq("collection_id", collectionFilter);
     }
@@ -475,7 +471,7 @@ export default function App() {
 
     const mapped = (data || []).map(mapLinkRow);
     setLinks(mapped);
-  }, [session, showTrash, statusFilter, collectionFilter, categoryFilter, favoriteOnly, search, sortMode]);
+  }, [session, showTrash, collectionFilter, categoryFilter, favoriteOnly, search, sortMode]);
 
   const requestAiAnalysis = useCallback(
     async (linkId: string): Promise<void> => {
@@ -1168,6 +1164,11 @@ export default function App() {
     [links]
   );
 
+  const visibleLinks = useMemo(
+    () => (statusFilter === "all" ? links : links.filter((item) => item.status === statusFilter)),
+    [links, statusFilter]
+  );
+
   const categoryMenu = useMemo(() => {
     const fromLinks = links
       .map((item) => (item.category || "").trim())
@@ -1632,11 +1633,11 @@ export default function App() {
           <section className={`panel links-panel ${viewMode}`}>
             <div className="section-head">
               <h2>{showTrash ? "휴지통 링크" : "링크 목록"}</h2>
-              <span className="result-count">{links.length}개</span>
+              <span className="result-count">{visibleLinks.length}개</span>
             </div>
             {loadingLinks && <p className="muted">불러오는 중...</p>}
 
-            {!loadingLinks && links.length === 0 && (
+            {!loadingLinks && visibleLinks.length === 0 && (
               <div className="empty-state">
                 <div className="empty-icon" aria-hidden>
                   ▤
@@ -1647,7 +1648,7 @@ export default function App() {
             )}
 
             {!loadingLinks &&
-              links.map((link) => {
+              visibleLinks.map((link) => {
                 return (
                   <article
                     key={link.id}
