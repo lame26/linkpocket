@@ -1,5 +1,10 @@
 # HISTORY
 
+## 2026-03-06 (Pages npm ci 실패 수정: 루트 lockfile 동기화)
+- 변경 목적: Cloudflare Pages 빌드에서 `npm ci`가 `lucide-react` 누락으로 실패하던 문제 해결
+- 사용자 체감 변화: Git 푸시 후 자동 배포가 `package.json`/`package-lock.json` 불일치 오류 없이 진행 가능
+- 남은 리스크/다음 작업: 워크스페이스 의존성 변경 시 `web/package-lock.json`뿐 아니라 루트 `package-lock.json`도 함께 커밋해야 재발 방지 가능
+
 ## 2026-03-06 (Cloudflare Pages 자동 배포 트리거 점검)
 - 변경 목적: Git 푸시 이후 Pages 자동 배포가 실제로 실행되는지 확인하기 위한 트리거 검증
 - 사용자 체감 변화: 웹 기능 변화 없이, 배포 반영 여부를 즉시 판별할 수 있는 `deploy-probe` 메타 마커가 추가됨
