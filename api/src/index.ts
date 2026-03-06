@@ -255,7 +255,7 @@ function extractReadableText(html: string): string | null {
     return null;
   }
 
-  return cleaned.slice(0, 6000);
+  return cleaned.slice(0, 12000);
 }
 
 async function fetchPageSnapshot(url: string): Promise<{ title: string | null; text: string | null; publishedAt: string | null }> {
@@ -298,6 +298,7 @@ async function callOpenAiJson<T>(env: Env, systemPrompt: string, userPrompt: str
     body: JSON.stringify({
       model,
       temperature: 0.2,
+      max_tokens: 2200,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
@@ -481,12 +482,12 @@ function toAiPreferencesResponse(pref: UserAiPreferences): {
 
 function getSummaryLengthInstruction(lengthMode: SummaryLengthMode): string {
   if (lengthMode === "short") {
-    return "summary must be 2 to 3 Korean sentences (roughly 110 to 220 Korean characters).";
+    return "summary must be 4 to 6 Korean sentences (roughly 220 to 420 Korean characters).";
   }
   if (lengthMode === "long") {
-    return "summary must be 7 to 9 Korean sentences (roughly 380 to 700 Korean characters).";
+    return "summary must be 12 to 16 Korean sentences (roughly 800 to 1400 Korean characters). Include core facts, numbers, actors, timeline, and implications when available.";
   }
-  return "summary must be 4 to 6 Korean sentences (roughly 220 to 420 Korean characters) with concrete key points.";
+  return "summary must be 7 to 10 Korean sentences (roughly 450 to 850 Korean characters) with concrete key points, major numbers, and context.";
 }
 
 function getSummaryStyleInstruction(styleMode: SummaryStyleMode): string {
@@ -852,7 +853,7 @@ export default {
         const snapshot = syntheticImport ? { title: null, text: null, publishedAt: null } : await fetchPageSnapshot(link.url);
         const rawTitle = snapshot.title;
         const articleText = snapshot.text;
-        const articleExcerpt = (articleText || "").slice(0, 4000);
+        const articleExcerpt = (articleText || "").slice(0, 10000);
         const fallbackTitle = syntheticImport ? "imported-article" : new URL(link.url).hostname;
         const userPreferences = await getUserAiPreferences(env, user.id);
         const summaryLengthInstruction = getSummaryLengthInstruction(userPreferences.summary_length);
