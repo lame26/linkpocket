@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import {
+  ChevronDown,
+  ExternalLink,
+  Grid2x2,
+  HelpCircle,
+  LayoutList,
+  LogOut,
+  PencilLine,
+  RefreshCw,
+  RotateCcw,
+  Search as SearchIcon,
+  Settings,
+  Sparkles,
+  Star,
+  Trash2,
+  X
+} from "lucide-react";
 import { supabase } from "./lib/supabase";
 import type { Collection, LinkItem, LinkStatus } from "./lib/types";
 
@@ -2673,7 +2690,7 @@ export default function App() {
               <div className="signup-guide-head">
                 <h3>회원가입 안내</h3>
                 <button type="button" className="icon-btn" onClick={() => setShowSignupGuide(false)} aria-label="닫기">
-                  ×
+                  <X size={16} aria-hidden />
                 </button>
               </div>
               <p className="muted">회원가입은 새 창 또는 현재 창에서 진행할 수 있습니다.</p>
@@ -2886,7 +2903,7 @@ export default function App() {
                         startCollectionEdit(collection);
                       }}
                     >
-                      ✏️
+                      <PencilLine size={13} aria-hidden />
                     </button>
                     <button
                       type="button"
@@ -2897,7 +2914,7 @@ export default function App() {
                         void handleDeleteCollection(collection.id);
                       }}
                     >
-                      🗑️
+                      <Trash2 size={13} aria-hidden />
                     </button>
                   </div>
                 </div>
@@ -2965,16 +2982,19 @@ export default function App() {
           <div className="topbar-right">
             {mainTab === "library" && (
               <>
-                <input
-                  ref={searchInputRef}
-                  className="search-input"
-                  placeholder="검색어 입력"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-	                <button
-	                  type="button"
-	                  onClick={() => {
+                <div className="search-wrap">
+                  <SearchIcon size={15} className="search-icon" aria-hidden />
+                  <input
+                    ref={searchInputRef}
+                    className="search-input"
+                    placeholder="검색어 입력"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
 	                    setIsAddModalOpen(true);
 	                    setManualTitleEdited(false);
 	                    setNewPublishedAt(null);
@@ -2994,7 +3014,7 @@ export default function App() {
               >
                 <span className="user-avatar">{userInitial}</span>
                 <span>{userLabel}</span>
-                <span>▾</span>
+                <ChevronDown size={14} aria-hidden />
               </button>
               {showUserMenu && (
                 <div className="user-menu">
@@ -3007,7 +3027,10 @@ export default function App() {
                       setShowUserMenu(false);
                     }}
                   >
-                    도움말
+                    <span className="btn-inline">
+                      <HelpCircle size={14} aria-hidden />
+                      도움말
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -3017,7 +3040,10 @@ export default function App() {
                       setShowUserMenu(false);
                     }}
                   >
-                    설정
+                    <span className="btn-inline">
+                      <Settings size={14} aria-hidden />
+                      설정
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -3025,7 +3051,12 @@ export default function App() {
                     onClick={handleLogout}
                     disabled={logoutLoading}
                   >
-                    {logoutLoading ? "로그아웃 중..." : "로그아웃"}
+                    {logoutLoading ? "로그아웃 중..." : (
+                      <span className="btn-inline">
+                        <LogOut size={14} aria-hidden />
+                        로그아웃
+                      </span>
+                    )}
                   </button>
                 </div>
               )}
@@ -3153,7 +3184,7 @@ export default function App() {
                 title="그리드 보기"
                 onClick={() => setViewMode("card")}
               >
-                ▦
+                <Grid2x2 size={15} aria-hidden />
               </button>
               <button
                 type="button"
@@ -3162,7 +3193,7 @@ export default function App() {
                 title="리스트 보기"
                 onClick={() => setViewMode("list")}
               >
-                ☰
+                <LayoutList size={15} aria-hidden />
               </button>
             </div>
           </section>
@@ -3173,7 +3204,7 @@ export default function App() {
             {!loadingLinks && visibleLinks.length === 0 && (
               <div className="empty-state">
                 <div className="empty-icon" aria-hidden>
-                  ▤
+                  <Sparkles size={20} aria-hidden />
                 </div>
                 <strong>아직 저장된 기사가 없습니다</strong>
                 <p>"링크 추가" 버튼으로 기사를 저장해보세요</p>
@@ -3277,7 +3308,7 @@ export default function App() {
                           window.open(link.url, "_blank", "noopener,noreferrer");
                         }}
                       >
-                        ↗
+                        <ExternalLink size={15} aria-hidden />
                       </button>
                       <button
                         type="button"
@@ -3289,7 +3320,7 @@ export default function App() {
                           void toggleFavorite(link);
                         }}
                       >
-                        ★
+                        <Star size={15} className="star-icon" aria-hidden />
                       </button>
                       <button
                         type="button"
@@ -3301,7 +3332,7 @@ export default function App() {
                           openLinkDetail(link);
                         }}
                       >
-                        ✎
+                        <PencilLine size={15} aria-hidden />
                       </button>
                       <button
                         type="button"
@@ -3314,7 +3345,7 @@ export default function App() {
                         }}
                         disabled={savingLinkId === link.id}
                       >
-                        AI
+                        <Sparkles size={15} aria-hidden />
                       </button>
                       {(link.ai_state === "failed" || link.ai_error) && (
                         <button
@@ -3328,7 +3359,7 @@ export default function App() {
                           }}
                           disabled={savingLinkId === link.id}
                         >
-                          ⟳
+                          <RefreshCw size={15} aria-hidden />
                         </button>
                       )}
 	                      {showTrash ? (
@@ -3343,7 +3374,7 @@ export default function App() {
 	                              void restoreDeletedLinks([link.id]);
 	                            }}
 	                          >
-	                            ↺
+	                            <RotateCcw size={15} aria-hidden />
 	                          </button>
 	                          <button
 	                            type="button"
@@ -3355,7 +3386,7 @@ export default function App() {
 	                              void permanentlyDeleteLinks([link.id]);
 	                            }}
 	                          >
-	                            DEL
+	                            <Trash2 size={15} aria-hidden />
 	                          </button>
 	                        </>
 	                      ) : (
@@ -3364,14 +3395,14 @@ export default function App() {
 	                          className="action-btn danger"
                           aria-label="삭제"
                           title="삭제"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void setLinkDeleted(link.id, true);
-                          }}
-                        >
-                          ⌫
-                        </button>
-                      )}
+	                          onClick={(event) => {
+	                            event.stopPropagation();
+	                            void setLinkDeleted(link.id, true);
+	                          }}
+	                        >
+	                          <Trash2 size={15} aria-hidden />
+	                        </button>
+	                      )}
                     </div>
                   </article>
                 );
@@ -3634,7 +3665,7 @@ export default function App() {
               <div className="add-modal-head">
                 <h3>링크 추가</h3>
                 <button type="button" className="icon-btn" onClick={() => setIsAddModalOpen(false)} aria-label="닫기">
-                  ×
+                  <X size={16} aria-hidden />
                 </button>
               </div>
 
@@ -3759,7 +3790,7 @@ export default function App() {
               <div className="help-head">
                 <h3>도움말</h3>
                 <button type="button" className="icon-btn" onClick={() => setIsHelpModalOpen(false)} aria-label="닫기">
-                  ×
+                  <X size={16} aria-hidden />
                 </button>
               </div>
               <ul className="help-list">
@@ -3807,7 +3838,8 @@ export default function App() {
                     className="detail-link-btn"
                     onClick={() => window.open(selectedLink.url, "_blank", "noopener,noreferrer")}
                   >
-                    원문 열기 ↗
+                    <ExternalLink size={14} aria-hidden />
+                    원문 열기
                   </button>
                   <span className="detail-link-host" title={selectedLink.url}>
                     {getUrlHostLabel(selectedLink.url)}
@@ -3868,7 +3900,7 @@ export default function App() {
                             aria-label={`${star}점`}
                             title={`${star}점`}
                           >
-                            ★
+                            <Star size={14} className="star-icon" aria-hidden />
                           </button>
                         );
                       })}
