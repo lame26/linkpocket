@@ -183,7 +183,9 @@ interface ImportArticleRow {
   press_raw?: string;
   date_raw?: string;
   date_iso?: string;
+  date?: string;
   keywords?: string[];
+  keywords_joined?: string;
   tags?: string[] | string;
 }
 
@@ -204,6 +206,10 @@ const AI_STATE_LABEL: Record<string, string> = {
 function formatDateLabel(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("ko-KR");
+}
+
+function getDisplayDateValue(link: Pick<LinkItem, "published_at" | "created_at">): string {
+  return link.published_at || link.created_at;
 }
 
 function renderRating(rating: number | null): string {
@@ -275,12 +281,210 @@ function parseRating(raw: string): number | null {
 }
 
 function buildImportFallbackUrl(row: ImportArticleRow, index: number): string {
-  const queryParts = [row.title, row.press_raw, row.date_iso, row.date_raw].filter((value) => typeof value === "string" && value.trim().length > 0);
+  const queryParts = [row.title, row.press_raw, row.date_iso, row.date, row.date_raw].filter(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
   const query = queryParts.join(" ").trim();
   if (!query) {
     return `https://www.google.com/search?q=linklens+import+${index + 1}`;
   }
   return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+function toIsoStartOfDayUtc(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) {
+    return null;
+  }
+  return dt.toISOString();
+}
+
+function parseImportDateToIso(raw: string, fallbackYear: number): string | null {
+  const value = raw.trim();
+  if (!value) {
+    return null;
+  }
+
+  const fullIso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s.*)?$/);
+  if (fullIso) {
+    return toIsoStartOfDayUtc(Number(fullIso[1]), Number(fullIso[2]), Number(fullIso[3]));
+  }
+
+  const fullDot = value.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/);
+  if (fullDot) {
+    return toIsoStartOfDayUtc(Number(fullDot[1]), Number(fullDot[2]), Number(fullDot[3]));
+  }
+
+  const shortYmd = value.match(/^'?(\d{2})\.(\d{1,2})\.(\d{1,2})$/);
+  if (shortYmd) {
+    return toIsoStartOfDayUtc(2000 + Number(shortYmd[1]), Number(shortYmd[2]), Number(shortYmd[3]));
+  }
+
+  const mdOnly = value.match(/^(\d{1,2})\.(\d{1,2})$/);
+  if (mdOnly) {
+    return toIsoStartOfDayUtc(fallbackYear, Number(mdOnly[1]), Number(mdOnly[2]));
+  }
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return toIsoStartOfDayUtc(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+  }
+
+  return null;
+}
+
+function inferImportYear(rows: ImportArticleRow[]): number {
+  const yearCounts = new Map<number, number>();
+  const addYear = (year: number) => {
+    if (!Number.isInteger(year) || year < 2000 || year > 2099) {
+      return;
+    }
+    yearCounts.set(year, (yearCounts.get(year) || 0) + 1);
+  };
+
+  rows.forEach((row) => {
+    const iso = (row.date_iso || row.date || "").trim();
+    const raw = (row.date_raw || "").trim();
+
+    const isoYear = iso.match(/^(\d{4})-/);
+    if (isoYear) {
+      addYear(Number(isoYear[1]));
+    }
+
+    const rawFullYear = raw.match(/^(\d{4})[.\-/]/);
+    if (rawFullYear) {
+      addYear(Number(rawFullYear[1]));
+    }
+
+    const rawTwoYear = raw.match(/^'?(\d{2})\./);
+    if (rawTwoYear) {
+      addYear(2000 + Number(rawTwoYear[1]));
+    }
+  });
+
+  if (yearCounts.size === 0) {
+    return new Date().getUTCFullYear();
+  }
+
+  let bestYear = new Date().getUTCFullYear();
+  let bestCount = -1;
+  for (const [year, count] of yearCounts.entries()) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestYear = year;
+    }
+  }
+  return bestYear;
+}
+
+function resolveImportPublishedAt(row: ImportArticleRow, fallbackYear: number): string | null {
+  const isoCandidate = (row.date_iso || row.date || "").trim();
+  const rawCandidate = (row.date_raw || "").trim();
+
+  const fromIso = isoCandidate ? parseImportDateToIso(isoCandidate, fallbackYear) : null;
+  if (fromIso) {
+    return fromIso;
+  }
+  return rawCandidate ? parseImportDateToIso(rawCandidate, fallbackYear) : null;
+}
+
+function parseImportKeywords(row: ImportArticleRow): string[] {
+  const fromArray = Array.isArray(row.keywords) ? row.keywords : [];
+  const fromJoined = typeof row.keywords_joined === "string" ? row.keywords_joined.split("|") : [];
+  return Array.from(
+    new Set(
+      [...fromArray, ...fromJoined]
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item) => item.length > 0)
+    )
+  ).slice(0, 12);
+}
+
+function parseCsvRows(text: string): ImportArticleRow[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (char === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (char === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    if (char === "\r") {
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const headers = rows[0].map((value) => value.replace(/^\uFEFF/, "").trim());
+  return rows
+    .slice(1)
+    .filter((values) => values.some((value) => value.trim().length > 0))
+    .map((values) => {
+      const mapped: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        mapped[header] = (values[index] || "").trim();
+      });
+
+      return {
+        url: mapped.url || "",
+        title: mapped.title || "",
+        notes: mapped.notes || "",
+        press_raw: mapped.press_raw || "",
+        date_iso: mapped.date_iso || "",
+        date_raw: mapped.date_raw || "",
+        keywords_joined: mapped.keywords_joined || "",
+        tags: mapped.tags || ""
+      } satisfies ImportArticleRow;
+    });
 }
 
 function normalizeCategoryName(raw: unknown): string | null {
@@ -650,10 +854,12 @@ export default function App() {
     }
 
     if (sortMode === "newest") {
+      query = query.order("published_at", { ascending: false, nullsFirst: false });
       query = query.order("created_at", { ascending: false });
     }
 
     if (sortMode === "oldest") {
+      query = query.order("published_at", { ascending: true, nullsFirst: false });
       query = query.order("created_at", { ascending: true });
     }
 
@@ -1018,13 +1224,16 @@ export default function App() {
     try {
       const text = await file.text();
       const trimmed = text.trim();
+      const lowerName = file.name.toLowerCase();
       if (!trimmed) {
         setToast({ kind: "err", message: "비어 있는 파일입니다." });
         return;
       }
 
       let rows: ImportArticleRow[] = [];
-      if (trimmed.startsWith("[")) {
+      if (lowerName.endsWith(".csv")) {
+        rows = parseCsvRows(text);
+      } else if (trimmed.startsWith("[")) {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed)) {
           rows = parsed as ImportArticleRow[];
@@ -1049,6 +1258,7 @@ export default function App() {
         return;
       }
 
+      const inferredYear = inferImportYear(rows);
       let inserted = 0;
       let failed = 0;
       const importedLinksForAi: Array<Pick<LinkItem, "id" | "url" | "title">> = [];
@@ -1058,14 +1268,13 @@ export default function App() {
         const rawUrl = (row.url || "").trim();
         const resolvedUrl = parseUrlValid(rawUrl) ? rawUrl : buildImportFallbackUrl(row, i);
         const resolvedTitle = (row.title || "").trim() || `가져온 기사 #${i + 1}`;
+        const publishedAt = resolveImportPublishedAt(row, inferredYear);
         const noteParts = [
           row.press_raw ? `출처: ${row.press_raw}` : "",
-          row.date_iso ? `날짜: ${row.date_iso}` : row.date_raw ? `날짜: ${row.date_raw}` : "",
+          row.date_iso ? `날짜: ${row.date_iso}` : row.date ? `날짜: ${row.date}` : row.date_raw ? `날짜: ${row.date_raw}` : "",
           row.notes ? `\n${row.notes}` : ""
         ].filter(Boolean);
-        const importKeywords = Array.isArray(row.keywords)
-          ? row.keywords.filter((item) => typeof item === "string" && item.trim().length > 0).slice(0, 8)
-          : [];
+        const importKeywords = parseImportKeywords(row);
         const importTagsRaw =
           Array.isArray(row.tags)
             ? row.tags.filter((item) => typeof item === "string")
@@ -1084,11 +1293,12 @@ export default function App() {
               note: noteParts.join("\n"),
               status: "unread",
               category: null,
+              published_at: publishedAt,
               keywords: []
             }
           ])
           .select(
-            "id, url, title, note, status, rating, is_favorite, category, summary, keywords, collection_id, ai_state, ai_error, created_at, deleted_at"
+            "id, url, title, note, status, rating, is_favorite, category, summary, keywords, collection_id, ai_state, ai_error, published_at, created_at, deleted_at"
           )
           .single();
 
@@ -1125,7 +1335,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setErrorMessage(`파일 가져오기 실패: ${message}`);
-      setToast({ kind: "err", message: "파일 형식을 확인해 주세요. (JSONL/JSON)" });
+      setToast({ kind: "err", message: "파일 형식을 확인해 주세요. (CSV/JSONL/JSON)" });
     } finally {
       setImportingFile(false);
       if (importFileInputRef.current) {
@@ -1866,7 +2076,7 @@ export default function App() {
             <input
               ref={importFileInputRef}
               type="file"
-              accept=".jsonl,.json,.txt"
+              accept=".csv,.jsonl,.json,.txt"
               style={{ display: "none" }}
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -2082,7 +2292,7 @@ export default function App() {
 
                     <div className="link-meta">
                       <span>{getUrlHostLabel(link.url)}</span>
-                      <span>{formatDateLabel(link.created_at)}</span>
+                      <span>{formatDateLabel(getDisplayDateValue(link))}</span>
                       <span>{STATUS_LABEL[link.status]}</span>
                     </div>
 
@@ -2365,7 +2575,7 @@ export default function App() {
                 </div>
 
                 <div className="detail-meta">
-                  <span>{formatDateLabel(selectedLink.created_at)}</span>
+                  <span>{formatDateLabel(getDisplayDateValue(selectedLink))}</span>
                   <span>{renderRating(selectedLink.rating)}</span>
                   <span>{selectedLink.collection?.name || "컬렉션 없음"}</span>
                 </div>
