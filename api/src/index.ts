@@ -149,6 +149,42 @@ function extractHtmlTitle(html: string): string | null {
     .trim();
 }
 
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+function extractReadableText(html: string): string | null {
+  const articleMatch = html.match(/<article[\s\S]*?<\/article>/i);
+  const mainMatch = html.match(/<main[\s\S]*?<\/main>/i);
+  const bodyMatch = html.match(/<body[\s\S]*?<\/body>/i);
+  const source = articleMatch?.[0] || mainMatch?.[0] || bodyMatch?.[0] || html;
+
+  const cleaned = decodeHtmlEntities(
+    source
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+      .replace(/<img[^>]*>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+
+  if (!cleaned) {
+    return null;
+  }
+
+  return cleaned.slice(0, 6000);
+}
+
 async function fetchPageTitle(url: string): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -171,6 +207,33 @@ async function fetchPageTitle(url: string): Promise<string | null> {
     return extractHtmlTitle(html);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchPageSnapshot(url: string): Promise<{ title: string | null; text: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 9000);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "user-agent": "LinkPocketBot/1.0 (+https://linkpocket.app)"
+      }
+    });
+    if (!res.ok) {
+      return { title: null, text: null };
+    }
+    const html = await res.text();
+    return {
+      title: extractHtmlTitle(html),
+      text: extractReadableText(html)
+    };
+  } catch {
+    return { title: null, text: null };
   } finally {
     clearTimeout(timer);
   }
@@ -738,7 +801,10 @@ export default {
         });
 
         const syntheticImport = isSyntheticImportUrl(link.url);
-        const rawTitle = syntheticImport ? null : await fetchPageTitle(link.url);
+        const snapshot = syntheticImport ? { title: null, text: null } : await fetchPageSnapshot(link.url);
+        const rawTitle = snapshot.title;
+        const articleText = snapshot.text;
+        const articleExcerpt = (articleText || "").slice(0, 4000);
         const fallbackTitle = syntheticImport ? "imported-article" : new URL(link.url).hostname;
         const userPreferences = await getUserAiPreferences(env, user.id);
         const summaryLengthInstruction = getSummaryLengthInstruction(userPreferences.summary_length);
@@ -762,6 +828,8 @@ export default {
             "Return strict JSON only.",
             "No hallucinations: if uncertain, keep values conservative.",
             "If rawTitle is available, use it to improve title quality.",
+            "Use only facts found in raw title, article text excerpt, or user note.",
+            "If requested details (numbers/quotes) are missing in sources, explicitly mention limited source details.",
             "You MUST apply user summary preferences strictly when generating summary.",
             "When a custom summary instruction is provided, prioritize it unless it conflicts with JSON format or safety.",
             summaryLengthInstruction,
@@ -776,6 +844,7 @@ export default {
             `URL: ${link.url}`,
             `Synthetic import URL: ${syntheticImport ? "yes" : "no"}`,
             `Raw title: ${rawTitle ?? ""}`,
+            `Article text excerpt: ${articleExcerpt}`,
             `Current title: ${link.title ?? ""}`,
             `User note: ${link.note ?? ""}`,
             `Summary length mode: ${userPreferences.summary_length}`,
