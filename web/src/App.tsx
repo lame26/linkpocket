@@ -2119,12 +2119,23 @@ export default function App() {
           <div className="logo-row">
             <div>
             <p className="eyebrow">Reading Archive</p>
-              <h1 className="logo-name">LinkLens</h1>
+              <h1 className="logo-name">LinkPocket</h1>
             </div>
           </div>
         </div>
 
         <div className="sidebar-scroll">
+          <div className="nav-group">
+            <p className="nav-group-label">홈</p>
+            <button
+              type="button"
+              className={`nav-btn ${mainTab === "library" ? "active" : ""}`}
+              onClick={() => setMainTab("library")}
+            >
+              라이브러리
+            </button>
+          </div>
+
           <div className="nav-group">
             <p className="nav-group-label">라이브러리</p>
             <button
@@ -2355,23 +2366,6 @@ export default function App() {
                 />
                 <button
                   type="button"
-                  className="ghost slim-btn"
-                  onClick={() => {
-                    setSearch("");
-                    setStatusFilter("all");
-                    setCollectionFilter("all");
-                    setCategoryFilter("all");
-                    setSortMode("newest");
-                    setFavoriteOnly(false);
-                  }}
-                >
-                  초기화
-                </button>
-                <button type="button" className="ghost" onClick={() => void loadLinks()}>
-                  새로고침
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     setIsAddModalOpen(true);
                     setManualTitleEdited(false);
@@ -2396,16 +2390,6 @@ export default function App() {
               {showUserMenu && (
                 <div className="user-menu">
                   <p>{session.user.email}</p>
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => {
-                      setMainTab("library");
-                      setShowUserMenu(false);
-                    }}
-                  >
-                    라이브러리
-                  </button>
                   <button
                     type="button"
                     className="ghost"
@@ -2494,9 +2478,6 @@ export default function App() {
           </section>
 
           <section className={`panel links-panel ${viewMode}`}>
-            <div className="section-head">
-              <h2>{showTrash ? "휴지통 링크" : "링크 목록"}</h2>
-            </div>
             {loadingLinks && <p className="muted">불러오는 중...</p>}
 
             {!loadingLinks && visibleLinks.length === 0 && (
