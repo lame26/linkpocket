@@ -3034,47 +3034,71 @@ export default function App() {
                 </div>
 
                 <div className="detail-meta">
-                  <span>{formatDateLabel(getDisplayDateValue(selectedLink))}</span>
-                  <span>{renderRating(selectedLink.rating)}</span>
-                  <span>{selectedLink.collection?.name || "컬렉션 없음"}</span>
+                  <div className="detail-meta-item">
+                    <span className="detail-meta-label">날짜</span>
+                    <strong className="detail-meta-value">{formatDateLabel(getDisplayDateValue(selectedLink))}</strong>
+                  </div>
+                  <div className="detail-meta-item">
+                    <span className="detail-meta-label">평가</span>
+                    <strong className="detail-meta-value">{renderRating(selectedLink.rating)}</strong>
+                  </div>
+                  <div className="detail-meta-item">
+                    <span className="detail-meta-label">컬렉션</span>
+                    <strong className="detail-meta-value" title={selectedLink.collection?.name || "컬렉션 없음"}>
+                      {selectedLink.collection?.name || "컬렉션 없음"}
+                    </strong>
+                  </div>
                 </div>
 
+                <section className="detail-summary-block" aria-label="기사 요약">
+                  <p className="detail-section-kicker">기사 요약</p>
+                  <p className={`detail-summary-text ${selectedLink.summary ? "" : "empty"}`}>
+                    {selectedLink.summary || "요약이 아직 없습니다. 하단의 AI 재실행을 누르면 생성됩니다."}
+                  </p>
+                </section>
+
                 <div className="detail-toggle-row">
-                  <div className="detail-status-toggle" role="group" aria-label="상태 선택">
-                    {DETAIL_STATUS_ORDER.map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        className={`status-mini-btn ${selectedDraft.status === status ? "active" : ""}`}
-                        onClick={() => updateDraft(selectedLink, { status })}
-                      >
-                        {STATUS_LABEL[status]}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="detail-star-rating" role="group" aria-label="별점 선택">
-                    {[1, 2, 3, 4, 5].map((star) => {
-                      const current = Number(selectedDraft.rating || 0);
-                      return (
+                  <div className="detail-control-block">
+                    <p className="detail-section-kicker">읽기 상태</p>
+                    <div className="detail-status-toggle" role="group" aria-label="상태 선택">
+                      {DETAIL_STATUS_ORDER.map((status) => (
                         <button
-                          key={star}
+                          key={status}
                           type="button"
-                          className={`star-btn ${current >= star ? "active" : ""}`}
-                          onClick={() => updateDraft(selectedLink, { rating: String(star) })}
-                          aria-label={`${star}점`}
-                          title={`${star}점`}
+                          className={`status-mini-btn ${selectedDraft.status === status ? "active" : ""}`}
+                          onClick={() => updateDraft(selectedLink, { status })}
                         >
-                          ★
+                          {STATUS_LABEL[status]}
                         </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      className={`star-clear ${selectedDraft.rating ? "active" : ""}`}
-                      onClick={() => updateDraft(selectedLink, { rating: "" })}
-                    >
-                      초기화
-                    </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detail-control-block">
+                    <p className="detail-section-kicker">별점</p>
+                    <div className="detail-star-rating" role="group" aria-label="별점 선택">
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const current = Number(selectedDraft.rating || 0);
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            className={`star-btn ${current >= star ? "active" : ""}`}
+                            onClick={() => updateDraft(selectedLink, { rating: String(star) })}
+                            aria-label={`${star}점`}
+                            title={`${star}점`}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        className={`star-clear ${selectedDraft.rating ? "active" : ""}`}
+                        onClick={() => updateDraft(selectedLink, { rating: "" })}
+                      >
+                        초기화
+                      </button>
+                    </div>
                   </div>
                 </div>
 

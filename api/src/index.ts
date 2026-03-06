@@ -528,7 +528,7 @@ export default {
             "Return strict JSON only.",
             "No hallucinations: if uncertain, keep values conservative.",
             "If rawTitle is available, use it to improve title quality.",
-            "summary must be max 3 Korean sentences.",
+            "summary must be 4 to 6 Korean sentences (roughly 220 to 420 Korean characters) with concrete key points.",
             "keywords must be an array of up to 5 short strings.",
             `category must be exactly one of: ${AI_CATEGORY_CATALOG.join(", ")}.`,
             "Never output a category outside the allowed list."
