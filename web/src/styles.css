@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  --ui-scale: 1;
   --font-ui: "Sora", "SUIT Variable", "Pretendard", "Noto Sans KR", sans-serif;
   --font-display: "Space Grotesk", "Sora", "SUIT Variable", sans-serif;
 
@@ -100,6 +101,7 @@ body::-webkit-scrollbar-thumb:hover,
 
 body {
   font-family: var(--font-ui);
+  font-size: calc(15px * var(--ui-scale));
   color: var(--text-1);
   line-height: 1.5;
   background:
@@ -490,7 +492,7 @@ textarea {
 
 .plan-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--brand), #8ef3ff);
+  background: linear-gradient(90deg, var(--brand), color-mix(in srgb, var(--brand) 70%, #d8e6dc));
 }
 
 .main {
@@ -667,6 +669,63 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.settings-panel {
+  padding: 16px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.settings-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-card p {
+  margin: 0;
+}
+
+.settings-control {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-control > span {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.danger-zone {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+}
+
+.danger-solid {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--danger) 82%, #ffffff), color-mix(in srgb, var(--danger) 64%, #000000));
+  color: #1b0d10;
+}
+
+.danger-solid:hover {
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--danger) 34%, transparent);
 }
 
 .chip-row {

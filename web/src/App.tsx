@@ -96,6 +96,8 @@ type SortMode = "newest" | "oldest" | "rating";
 type ViewMode = "card" | "list";
 type StatusFilter = "all" | LinkStatus;
 type ThemeMode = "dark" | "light";
+type MainTab = "library" | "settings";
+type FontScaleMode = "small" | "normal" | "large";
 const DETAIL_STATUS_ORDER: LinkStatus[] = ["unread", "reading", "done", "archived"];
 
 const CATEGORY_BASE_MENU = [
@@ -157,6 +159,12 @@ const COLLECTION_COLOR_PRESET = [
   "#7f8fa6",
   "#9d6f53"
 ] as const;
+
+const FONT_SCALE_MAP: Record<FontScaleMode, number> = {
+  small: 0.92,
+  normal: 1,
+  large: 1.08
+};
 
 interface LinkDraft {
   note: string;
@@ -487,6 +495,26 @@ function parseCsvRows(text: string): ImportArticleRow[] {
     });
 }
 
+function csvEscape(value: unknown): string {
+  const text = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replace(/"/g, "\"\"")}"`;
+  }
+  return text;
+}
+
+function downloadTextFile(filename: string, text: string, mimeType: string): void {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function normalizeCategoryName(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
@@ -645,6 +673,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [showTrash, setShowTrash] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+  const [mainTab, setMainTab] = useState<MainTab>("library");
+  const [fontScaleMode, setFontScaleMode] = useState<FontScaleMode>("normal");
 
   const [newUrl, setNewUrl] = useState("");
   const [newTitle, setNewTitle] = useState("");
@@ -658,6 +688,8 @@ export default function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [manualTitleEdited, setManualTitleEdited] = useState(false);
   const [importingFile, setImportingFile] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<"" | "jsonl" | "csv">("");
+  const [deletingAll, setDeletingAll] = useState(false);
   const [bulkAiRunning, setBulkAiRunning] = useState(false);
 
   const [collectionName, setCollectionName] = useState("");
@@ -740,6 +772,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("linklens-font-scale") : null;
+    if (saved === "small" || saved === "normal" || saved === "large") {
+      setFontScaleMode(saved);
+    }
+  }, []);
+
+  useEffect(() => {
     if (typeof document !== "undefined") {
       document.documentElement.dataset.theme = themeMode;
     }
@@ -747,6 +786,21 @@ export default function App() {
       window.localStorage.setItem("linklens-theme", themeMode);
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.style.setProperty("--ui-scale", String(FONT_SCALE_MAP[fontScaleMode]));
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("linklens-font-scale", fontScaleMode);
+    }
+  }, [fontScaleMode]);
+
+  useEffect(() => {
+    if (mainTab !== "library") {
+      setSelectedLinkId(null);
+    }
+  }, [mainTab]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -1344,6 +1398,166 @@ export default function App() {
     }
   }
 
+  async function fetchAllLinksForExport(): Promise<LinkItem[]> {
+    if (!session) {
+      return [];
+    }
+
+    const pageSize = 500;
+    let page = 0;
+    const result: LinkItem[] = [];
+
+    while (true) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error } = await supabase
+        .from("links")
+        .select(
+          "id, url, title, note, status, rating, is_favorite, category, summary, keywords, collection_id, ai_state, ai_error, published_at, created_at, deleted_at, collection:collections(id, name, color), link_tags(tag:tags(name))"
+        )
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      result.push(...data.map(mapLinkRow));
+      if (data.length < pageSize) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return result;
+  }
+
+  async function handleExportLinks(format: "jsonl" | "csv"): Promise<void> {
+    if (!session || exportingFormat) {
+      return;
+    }
+
+    setExportingFormat(format);
+    setErrorMessage(null);
+
+    try {
+      const rows = await fetchAllLinksForExport();
+      if (rows.length === 0) {
+        setToast({ kind: "info", message: "내보낼 링크가 없습니다." });
+        return;
+      }
+
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      if (format === "jsonl") {
+        const jsonl = rows
+          .map((item) =>
+            JSON.stringify({
+              url: item.url,
+              title: item.title,
+              notes: item.note,
+              status: item.status,
+              rating: item.rating,
+              category: item.category,
+              summary: item.summary,
+              keywords: item.keywords,
+              tags: item.tags,
+              collection: item.collection?.name || null,
+              published_at: item.published_at,
+              created_at: item.created_at
+            })
+          )
+          .join("\n");
+        downloadTextFile(`linkpocket_export_${stamp}.jsonl`, jsonl, "application/x-ndjson;charset=utf-8");
+      } else {
+        const header = [
+          "url",
+          "title",
+          "notes",
+          "status",
+          "rating",
+          "category",
+          "summary",
+          "keywords_joined",
+          "tags_joined",
+          "collection",
+          "published_at",
+          "created_at"
+        ];
+        const lines = rows.map((item) =>
+          [
+            item.url,
+            item.title || "",
+            item.note || "",
+            item.status,
+            item.rating ?? "",
+            item.category || "",
+            item.summary || "",
+            item.keywords.join(" | "),
+            item.tags.join(" | "),
+            item.collection?.name || "",
+            item.published_at || "",
+            item.created_at
+          ]
+            .map(csvEscape)
+            .join(",")
+        );
+        const csv = [header.join(","), ...lines].join("\n");
+        downloadTextFile(`linkpocket_export_${stamp}.csv`, csv, "text/csv;charset=utf-8");
+      }
+
+      setToast({ kind: "ok", message: `내보내기 완료 (${rows.length}건)` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorMessage(`내보내기 실패: ${message}`);
+      setToast({ kind: "err", message: "내보내기 실패" });
+    } finally {
+      setExportingFormat("");
+    }
+  }
+
+  async function handleDeleteAllLinks(): Promise<void> {
+    if (!session || deletingAll) {
+      return;
+    }
+
+    const totalCount = libraryStats.total + libraryStats.trash;
+    if (totalCount <= 0) {
+      setToast({ kind: "info", message: "삭제할 링크가 없습니다." });
+      return;
+    }
+
+    const confirmed = window.confirm(`전체 링크 ${totalCount}건을 영구 삭제할까요?\n이 작업은 되돌릴 수 없습니다.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingAll(true);
+    setErrorMessage(null);
+    try {
+      const { error } = await supabase.from("links").delete().eq("user_id", session.user.id);
+      if (error) {
+        throw error;
+      }
+
+      setSelectedLinkId(null);
+      setDrafts({});
+      await loadLinks();
+      setToast({ kind: "ok", message: `전체 링크 ${totalCount}건 삭제 완료` });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorMessage(`전체 삭제 실패: ${message}`);
+      setToast({ kind: "err", message: "전체 삭제 실패" });
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
   function startCollectionEdit(collection: Collection): void {
     setEditingCollectionId(collection.id);
     setCollectionName(collection.name);
@@ -1778,6 +1992,9 @@ export default function App() {
     [collections, collectionFilter]
   );
   const currentViewTitle = useMemo(() => {
+    if (mainTab === "settings") {
+      return "설정";
+    }
     if (showTrash) {
       return "휴지통";
     }
@@ -1800,7 +2017,7 @@ export default function App() {
       return "완료";
     }
     return "전체 기사";
-  }, [showTrash, favoriteOnly, categoryFilter, currentCollectionName, statusFilter]);
+  }, [mainTab, showTrash, favoriteOnly, categoryFilter, currentCollectionName, statusFilter]);
 
   if (!authReady) {
     return <main className="app-shell">세션 확인 중...</main>;
@@ -1863,25 +2080,37 @@ export default function App() {
             <p className="eyebrow">Reading Archive</p>
               <h1 className="logo-name">LinkLens</h1>
             </div>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="테마 토글"
-              title="테마 토글"
-              onClick={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
-            >
-              {themeMode === "dark" ? "☀️" : "🌙"}
-            </button>
           </div>
         </div>
 
         <div className="sidebar-scroll">
+          <div className="nav-group">
+            <p className="nav-group-label">작업 공간</p>
+            <button
+              type="button"
+              className={`nav-btn ${mainTab === "library" ? "active" : ""}`}
+              onClick={() => setMainTab("library")}
+            >
+              라이브러리
+            </button>
+            <button
+              type="button"
+              className={`nav-btn ${mainTab === "settings" ? "active" : ""}`}
+              onClick={() => setMainTab("settings")}
+            >
+              설정
+            </button>
+          </div>
+
+          {mainTab === "library" && (
+            <>
           <div className="nav-group">
             <p className="nav-group-label">라이브러리</p>
             <button
               type="button"
               className={`nav-btn ${!showTrash && statusFilter === "all" && !favoriteOnly ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setShowTrash(false);
                 setStatusFilter("all");
                 setCategoryFilter("all");
@@ -1894,6 +2123,7 @@ export default function App() {
               type="button"
               className={`nav-btn ${!showTrash && statusFilter === "unread" ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setShowTrash(false);
                 setStatusFilter("unread");
                 setCategoryFilter("all");
@@ -1906,6 +2136,7 @@ export default function App() {
               type="button"
               className={`nav-btn ${!showTrash && statusFilter === "reading" ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setShowTrash(false);
                 setStatusFilter("reading");
                 setCategoryFilter("all");
@@ -1918,6 +2149,7 @@ export default function App() {
               type="button"
               className={`nav-btn ${!showTrash && favoriteOnly ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setShowTrash(false);
                 setStatusFilter("all");
                 setCategoryFilter("all");
@@ -1930,6 +2162,7 @@ export default function App() {
               type="button"
               className={`nav-btn ${!showTrash && statusFilter === "done" ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setShowTrash(false);
                 setStatusFilter("done");
                 setCategoryFilter("all");
@@ -1942,6 +2175,7 @@ export default function App() {
               type="button"
               className={`nav-btn ${showTrash ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setFavoriteOnly(false);
                 setCategoryFilter("all");
                 setShowTrash((prev) => !prev);
@@ -1959,6 +2193,7 @@ export default function App() {
                 type="button"
                 className={`nav-btn ${!showTrash && categoryFilter === row.category ? "active" : ""}`}
                 onClick={() => {
+                  setMainTab("library");
                   setShowTrash(false);
                   setFavoriteOnly(false);
                   setCollectionFilter("all");
@@ -1977,6 +2212,7 @@ export default function App() {
               type="button"
               className={`nav-btn ${collectionFilter === "all" ? "active" : ""}`}
               onClick={() => {
+                setMainTab("library");
                 setCollectionFilter("all");
                 setCategoryFilter("all");
               }}
@@ -1991,6 +2227,7 @@ export default function App() {
                     type="button"
                     className={`nav-btn collection-btn ${collectionFilter === collection.id ? "active" : ""}`}
                     onClick={() => {
+                      setMainTab("library");
                       setCategoryFilter("all");
                       setCollectionFilter(collection.id);
                     }}
@@ -2053,6 +2290,8 @@ export default function App() {
               </div>
             </form>
           </div>
+            </>
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -2070,66 +2309,63 @@ export default function App() {
       </aside>
 
       <main className="main">
+        <input
+          ref={importFileInputRef}
+          type="file"
+          accept=".csv,.jsonl,.json,.txt"
+          style={{ display: "none" }}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              void handleImportArticlesFile(file);
+            }
+          }}
+        />
+
         <header className="topbar">
           <h2 className="page-title">{currentViewTitle}</h2>
           <div className="topbar-right">
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".csv,.jsonl,.json,.txt"
-              style={{ display: "none" }}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleImportArticlesFile(file);
-                }
-              }}
-            />
-            <input
-              ref={searchInputRef}
-              className="search-input"
-              placeholder="검색어 입력"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <button
-              type="button"
-              className="ghost slim-btn"
-              onClick={() => {
-                setSearch("");
-                setStatusFilter("all");
-                setCollectionFilter("all");
-                setCategoryFilter("all");
-                setSortMode("newest");
-                setFavoriteOnly(false);
-              }}
-            >
-              초기화
-            </button>
-            <button type="button" className="ghost" onClick={() => void loadLinks()}>
-              새로고침
-            </button>
-            <button type="button" className="ghost" onClick={() => void runBulkAiForUncategorized()} disabled={bulkAiRunning || loadingLinks}>
-              {bulkAiRunning ? "미분류 AI 처리중..." : "미분류 전체 AI"}
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => importFileInputRef.current?.click()}
-              disabled={importingFile}
-            >
-              {importingFile ? "가져오는 중..." : "파일 가져오기"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAddModalOpen(true);
-                setManualTitleEdited(false);
-                setTimeout(() => newUrlInputRef.current?.focus(), 0);
-              }}
-            >
-              + 링크 추가
-            </button>
+            {mainTab === "library" && (
+              <>
+                <input
+                  ref={searchInputRef}
+                  className="search-input"
+                  placeholder="검색어 입력"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="ghost slim-btn"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("all");
+                    setCollectionFilter("all");
+                    setCategoryFilter("all");
+                    setSortMode("newest");
+                    setFavoriteOnly(false);
+                  }}
+                >
+                  초기화
+                </button>
+                <button type="button" className="ghost" onClick={() => void loadLinks()}>
+                  새로고침
+                </button>
+                <button type="button" className="ghost" onClick={() => void runBulkAiForUncategorized()} disabled={bulkAiRunning || loadingLinks}>
+                  {bulkAiRunning ? "미분류 AI 처리중..." : "미분류 전체 AI"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddModalOpen(true);
+                    setManualTitleEdited(false);
+                    setTimeout(() => newUrlInputRef.current?.focus(), 0);
+                  }}
+                >
+                  + 링크 추가
+                </button>
+              </>
+            )}
             <div className="user-menu-wrap" onClick={(event) => event.stopPropagation()}>
               <button
                 type="button"
@@ -2154,6 +2390,8 @@ export default function App() {
         </header>
 
         <div className="content">
+          {mainTab === "library" ? (
+            <>
           <section className="stats-grid">
             <article className="stat">
               <span>전체</span>
@@ -2397,6 +2635,99 @@ export default function App() {
                 );
               })}
           </section>
+            </>
+          ) : (
+            <section className="panel settings-panel">
+              <div className="settings-grid">
+                <article className="settings-card">
+                  <h3>데이터 관리</h3>
+                  <p className="muted">기사 가져오기/내보내기와 전체 삭제를 관리합니다.</p>
+                  <div className="settings-actions">
+                    <button type="button" className="ghost" onClick={() => importFileInputRef.current?.click()} disabled={importingFile}>
+                      {importingFile ? "가져오는 중..." : "파일 가져오기"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => void handleExportLinks("jsonl")}
+                      disabled={Boolean(exportingFormat)}
+                    >
+                      {exportingFormat === "jsonl" ? "JSONL 내보내는 중..." : "JSONL 내보내기"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => void handleExportLinks("csv")}
+                      disabled={Boolean(exportingFormat)}
+                    >
+                      {exportingFormat === "csv" ? "CSV 내보내는 중..." : "CSV 내보내기"}
+                    </button>
+                  </div>
+                  <p className="muted">내보내기는 삭제되지 않은 링크만 포함합니다.</p>
+                </article>
+
+                <article className="settings-card">
+                  <h3>화면 설정</h3>
+                  <p className="muted">테마와 글자 크기를 즉시 변경할 수 있습니다.</p>
+                  <div className="settings-control">
+                    <span>테마</span>
+                    <div className="chip-row">
+                      <button
+                        type="button"
+                        className={`chip ${themeMode === "dark" ? "active" : ""}`}
+                        onClick={() => setThemeMode("dark")}
+                      >
+                        다크
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip ${themeMode === "light" ? "active" : ""}`}
+                        onClick={() => setThemeMode("light")}
+                      >
+                        라이트
+                      </button>
+                    </div>
+                  </div>
+                  <div className="settings-control">
+                    <span>글자 크기</span>
+                    <div className="chip-row">
+                      <button
+                        type="button"
+                        className={`chip ${fontScaleMode === "small" ? "active" : ""}`}
+                        onClick={() => setFontScaleMode("small")}
+                      >
+                        작게
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip ${fontScaleMode === "normal" ? "active" : ""}`}
+                        onClick={() => setFontScaleMode("normal")}
+                      >
+                        기본
+                      </button>
+                      <button
+                        type="button"
+                        className={`chip ${fontScaleMode === "large" ? "active" : ""}`}
+                        onClick={() => setFontScaleMode("large")}
+                      >
+                        크게
+                      </button>
+                    </div>
+                  </div>
+                </article>
+
+                <article className="settings-card danger-zone">
+                  <h3>위험 구역</h3>
+                  <p className="muted">모든 링크를 영구 삭제합니다. 되돌릴 수 없습니다.</p>
+                  <div className="settings-actions">
+                    <button type="button" className="danger-solid" onClick={() => void handleDeleteAllLinks()} disabled={deletingAll}>
+                      {deletingAll ? "전체 삭제 중..." : "기사 전체 삭제"}
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </section>
+          )}
         </div>
 
         {isAddModalOpen && (
