@@ -1,5 +1,10 @@
 # HISTORY
 
+## 2026-03-06 (마감 정리: 지침 요약 + 작업목록 슬림화 + 배포 프로브 제거)
+- 변경 목적: 누적된 운영 지침/할 일 목록을 읽기 쉬운 수준으로 압축하고, 배포 점검용 임시 마커를 정리해 문서/파일 상태를 깔끔하게 마감
+- 사용자 체감 변화: `README.md`의 소통 지침이 중복 없이 요약되어 다음 세션 인수 시간이 줄고, `NEXT_TASKS.md`가 미완료 항목 중심으로 정리되어 우선순위 파악이 쉬워짐. `web/index.html`의 `deploy-probe` 메타가 제거되어 프로덕션 헤더가 정리됨
+- 남은 리스크/다음 작업: 미완료 운영 과제(SQL 백필/Pages env 고정)는 `NEXT_TASKS.md` P0 기준으로 다음 세션에서 우선 처리 필요
+
 ## 2026-03-06 (Pages npm ci 실패 수정: 루트 lockfile 동기화)
 - 변경 목적: Cloudflare Pages 빌드에서 `npm ci`가 `lucide-react` 누락으로 실패하던 문제 해결
 - 사용자 체감 변화: Git 푸시 후 자동 배포가 `package.json`/`package-lock.json` 불일치 오류 없이 진행 가능
