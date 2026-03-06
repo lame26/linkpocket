@@ -21,6 +21,7 @@ export interface LinkItem {
   collection_id: string | null;
   ai_state: LinkAiState;
   ai_error: string | null;
+  published_at: string | null;
   created_at: string;
   deleted_at: string | null;
   collection: Collection | null;
