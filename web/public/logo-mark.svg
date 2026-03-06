@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">LinkPocket Mark</title>
+  <desc id="desc">Interlocking geometric link mark for LinkPocket</desc>
+  <path
+    fill="#EAF0FF"
+    d="M92 250L224 118H336L303 151H238L149 240L190 281H286L253 314H176L92 250Z"
+  />
+  <path
+    fill="#EAF0FF"
+    d="M420 262L288 394H176L209 361H274L363 272L322 231H226L259 198H336L420 262Z"
+  />
+  <path
+    fill="#EAF0FF"
+    d="M214 171H332L365 204H278L204 278H86L119 245H186L214 171Z"
+  />
+  <path
+    fill="#EAF0FF"
+    d="M298 341H180L147 308H234L308 234H426L393 267H326L298 341Z"
+  />
+  <path fill="#3F46D8" d="M365 204L430 269L383 316L318 251Z" />
+</svg>
